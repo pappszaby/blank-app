@@ -9,7 +9,7 @@ import string
 
 DB = "expenses.db"
 
-# --- Initialize DB ---
+# --- Initialize DB1 ---
 def init_db():
     conn = sqlite3.connect(DB, check_same_thread=False)
     conn.execute("""
@@ -196,7 +196,7 @@ def expense_app():
         conn.commit()
         st.success(f"{del_id} ID törölve.")
 
-# --- Main logic ---
+# --- Main logic 1---
 def main():
 
     if not st.session_state['logged_in']:
