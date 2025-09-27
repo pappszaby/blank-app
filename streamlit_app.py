@@ -6,45 +6,47 @@ import altair as alt
 from datetime import date
 import random
 import string
+from datetime import datetime
+
 
 DB = "expenses.db"
 
 # --- Initialize DB1 ---
+import sqlite3
+
+DB = "expenses.db"  # or your actual DB filename
+
 def init_db():
     conn = sqlite3.connect(DB, check_same_thread=False)
+    conn.row_factory = sqlite3.Row  # Enable column-name access
 
-    # Create expenses table
+    # Create tables if they don't exist
     conn.execute("""
         CREATE TABLE IF NOT EXISTS expenses (
             id INTEGER PRIMARY KEY,
             date TEXT,
             category TEXT,
-            amount REAL
+            amount REAL,
+            username TEXT
         )
     """)
 
-    # Create users table (initial schema, without email)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY,
             username TEXT UNIQUE,
             password_hash TEXT,
-            reset_code TEXT
+            reset_code TEXT,
+            email TEXT,
+            role TEXT DEFAULT 'viewer'
         )
     """)
-
-    # Add email column to users table if it doesn't exist
-    try:
-        conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
-    except sqlite3.OperationalError as e:
-        if "duplicate column name: email" not in str(e):
-            raise e  # Only ignore the "already exists" error
 
     conn.commit()
     return conn
 
+# Initialize connection
 conn = init_db()
-
 
 # --- Helper functions ---
 def hash_password(password):
@@ -79,8 +81,10 @@ def login():
         if user and verify_password(password, user[2]):
             st.session_state['logged_in'] = True
             st.session_state['username'] = username
+            st.session_state['role'] = user[5]  # assuming role is the 5th column
             st.session_state['rerun_flag'] = not st.session_state['rerun_flag']  # Force rerun workaround
-            st.success(f"Sikeres bejelentkezés, üdv {username}!")
+            st.success(f"Sikeres bejelentkezés: {username} ({user['role']})")
+            st.rerun()
         else:
             st.error("Hibás felhasználónév vagy jelszó")
 
@@ -147,6 +151,10 @@ def reset_password():
                 st.session_state['show_reset'] = False
         else:
             st.error("Érvénytelen kód.")
+        if st.session_state.get("role") == "admin":
+           st.success("✅ Admin jogosultság")
+        else:
+           st.warning("🔒 Csak olvasási jogosultság")
 
 # --- Expense Tracker ---
 def expense_app():
@@ -169,6 +177,7 @@ def expense_app():
 
     # ➕ Add New Expense
     if menu == "➕ Új kiadás hozzáadása":
+      if st.session_state['role'] == 'admin':  
         with st.form("add_expense"):
             d = st.date_input("Dátum", value=date.today())
             cat = st.selectbox("Kategória", categories)
@@ -179,6 +188,8 @@ def expense_app():
                              (d.isoformat(), cat, float(amt)))
                 conn.commit()
                 st.success("✅ Kiadás hozzáadva.")
+      else:
+         st.warning("🔒 Ehhez a funkcióhoz admin jogosultság szükséges.")
 
     # 📆 Monthly Summary
     elif menu == "📆 Havi összesítés":
@@ -225,32 +236,71 @@ def expense_app():
             monthly = df_all.groupby('month')['amount'].sum().reset_index()
             st.subheader("📆 Havi bontás:")
             st.dataframe(monthly)
-
     # ✏️ Edit/Delete
     elif menu == "✏️ Kiadások szerkesztése / törlése":
-        st.subheader("✏️ Kiadások szerkesztése")
+        if st.session_state['role'] == 'admin':
+            st.subheader("✏️ Kiadások szerkesztése")
 
-        df_edit = pd.read_sql_query("SELECT * FROM expenses ORDER BY date DESC", conn)
-        df_edited = st.data_editor(df_edit, use_container_width=True, num_rows="dynamic")
+            # read into pandas DataFrame
+            df = pd.read_sql_query("SELECT * FROM expenses ORDER BY date DESC", conn)
 
-        if st.button("💾 Módosítások mentése"):
-            for i in range(len(df_edited)):
-                row = df_edited.iloc[i]
-                conn.execute(
-                    "UPDATE expenses SET date=?, category=?, amount=? WHERE id=?",
-                    (row['date'], row['category'], row['amount'], row['id'])
-                )
-            conn.commit()
-            st.success("✅ Módosítások elmentve.")
+            if df.empty:
+                st.info("❕ Nincs rögzített kiadás.")
+            else:
+                # Ensure proper types
+                df['date'] = pd.to_datetime(df['date'], errors='coerce')           # convert dates
+                df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0)  # ensure numeric amount
+                df = df.dropna(subset=['date'])  # drop rows with invalid dates
 
-        st.subheader("🗑️ Kiadás törlése")
-        del_id = st.number_input("Törlendő ID", min_value=1, step=1)
-        if st.button("❌ Törlés"):
-            conn.execute("DELETE FROM expenses WHERE id = ?", (del_id,))
-            conn.commit()
-            st.success(f"✅ {del_id} ID törölve.")
+                # month column like "2025-09"
+                df['month'] = df['date'].dt.to_period('M').astype(str)
 
+                # categories list (same as other places)
+                categories = ["Lakbér", "Közös költség", "Áram", "Hideg víz",
+                              "Meleg víz", "Fűtés", "Internet_TV", "Egyéb"]
 
+                # iterate months newest-first
+                months = sorted(df['month'].unique(), reverse=True)
+                for month in months:
+                    group = df[df['month'] == month].sort_values('date', ascending=False)
+                    month_total = group['amount'].sum()
+                    # month expander with subtotal
+                    with st.expander(f"📆 {month} havi kiadások — Összesen: {month_total:,.0f} Ft"):
+                        for _, expense in group.iterrows():
+                            exp_id = int(expense['id'])
+                            # build a friendly label for the inner expander
+                            label = f"{expense['date'].strftime('%Y-%m-%d')} – {expense['category']} – {expense['amount']:.2f} Ft"
+                            with st.expander(label, expanded=False):
+                                # date_input expects a datetime.date
+                                date_value = expense['date'].date()
+                                new_date = st.date_input("Dátum", value=date_value, key=f"date_{exp_id}")
+
+                                # preselect category if possible
+                                current_index = categories.index(expense['category']) if expense['category'] in categories else 0
+                                new_category = st.selectbox("Kategória", categories, index=current_index, key=f"cat_{exp_id}")
+
+                                new_amount = st.number_input("Összeg (Ft)", value=float(expense['amount']), key=f"amt_{exp_id}")
+
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    if st.button("💾 Mentés", key=f"save_{exp_id}"):
+                                        conn.execute("""
+                                            UPDATE expenses
+                                            SET date = ?, category = ?, amount = ?
+                                            WHERE id = ?
+                                        """, (new_date.isoformat(), new_category, new_amount, exp_id))
+                                        conn.commit()
+                                        st.success("✅ Kiadás frissítve.")
+                                        st.experimental_rerun()
+
+                                with col2:
+                                    if st.button("🗑️ Törlés", key=f"delete_{exp_id}"):
+                                        conn.execute("DELETE FROM expenses WHERE id = ?", (exp_id,))
+                                        conn.commit()
+                                        st.success("🗑️ Kiadás törölve.")
+                                        st.experimental_rerun()
+        else:
+            st.warning("🔒 Ehhez a funkcióhoz admin jogosultság szükséges.")
 
 # --- Main logic 1---
 def main():
@@ -274,7 +324,6 @@ def main():
             st.session_state['username'] = ""
             st.session_state['rerun_flag'] = not st.session_state['rerun_flag']
         else:
-            expense_app()
-
+         expense_app()
 if __name__ == "__main__":
-    main()
+     main()
