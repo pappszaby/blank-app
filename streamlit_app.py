@@ -57,7 +57,7 @@ for key, default in {
 # --- Auth Functions ---
 def login():
     st.title("Bejelentkezés")
-    st.header("Nádasdy utca 15/1 - 411-es lakás")
+    st.header("Nádasdy utca 15/1 (411-es lakás)")
     username = st.text_input("Felhasználónév")
     password = st.text_input("Jelszó", type="password")
 
@@ -132,7 +132,7 @@ def reset_password():
 # --- Expense Tracker ---
 def expense_app():
     st.title(f" Üdv! – {st.session_state['username']}")
-    st.header(f"Nádasdy utca 15/1 411 es lakás kiadásai")
+    st.header(f"Nádasdy utca 15/1 411-es lakás (albérlő költségei)")
 
     categories = [
         "Lakbér", "Közös költség", "Áram", "Hideg víz",
