@@ -140,7 +140,7 @@ def expense_app():
     with st.form("add_expense"):
         d = st.date_input("Dátum", value=date.today())
         cat = st.selectbox("Kategória", categories)
-        amt = st.number_input("Összeg (Ft)", min_value=0, format="%.2f")
+        amt = st.number_input("Összeg (Ft)", min_value=0.0, format="%.2f")
         submitted = st.form_submit_button("Hozzáadás")
         if submitted:
             conn.execute("INSERT INTO expenses (date, category, amount) VALUES (?, ?, ?)", (d.isoformat(), cat, float(amt)))
@@ -151,7 +151,7 @@ def expense_app():
 
     if st.button("Havi összesítés"):
         df = pd.read_sql_query("SELECT date, category, amount FROM expenses WHERE date LIKE ? ORDER BY date DESC", conn, params=(month + "%",))
-        total = df['amount'].sum() if not df.empty else 0
+        total = df['amount'].sum() if not df.empty else 0.0
         st.write(f"Összesen: {total:.2f} Ft")
         st.dataframe(df)
 
