@@ -291,14 +291,14 @@ def expense_app():
                                         """, (new_date.isoformat(), new_category, new_amount, exp_id))
                                         conn.commit()
                                         st.success("✅ Kiadás frissítve.")
-                                        st.experimental_rerun()
+                                        st.rerun()
 
                                 with col2:
                                     if st.button("🗑️ Törlés", key=f"delete_{exp_id}"):
                                         conn.execute("DELETE FROM expenses WHERE id = ?", (exp_id,))
                                         conn.commit()
                                         st.success("🗑️ Kiadás törölve.")
-                                        st.experimental_rerun()
+                                        st.rerun()
         else:
             st.warning("🔒 Ehhez a funkcióhoz admin jogosultság szükséges.")
 
