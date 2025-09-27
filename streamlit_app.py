@@ -163,11 +163,11 @@ def expense_app():
 
     # Sidebar menu
     menu = st.sidebar.radio("📚 Menü", [
-        "➕ Új kiadás hozzáadása",
+        "➕ Új költség hozzáadása",
         "📆 Havi összesítés",
         "📊 Kategória diagram",
-        "📋 Összes kiadás",
-        "✏️ Kiadások szerkesztése / törlése"
+        "📋 Összes költség",
+        "✏️ Költségek szerkesztése"
     ])
 
     categories = [
@@ -176,7 +176,7 @@ def expense_app():
     ]
 
     # ➕ Add New Expense
-    if menu == "➕ Új kiadás hozzáadása":
+    if menu == "➕ Új költség hozzáadása":
       if st.session_state['role'] == 'admin':  
         with st.form("add_expense"):
             d = st.date_input("Dátum", value=date.today())
@@ -187,7 +187,7 @@ def expense_app():
                 conn.execute("INSERT INTO expenses (date, category, amount) VALUES (?, ?, ?)",
                              (d.isoformat(), cat, float(amt)))
                 conn.commit()
-                st.success("✅ Kiadás hozzáadva.")
+                st.success("✅ Költség hozzáadva.")
       else:
          st.warning("🔒 Ehhez a funkcióhoz admin jogosultság szükséges.")
 
@@ -197,7 +197,7 @@ def expense_app():
         df = pd.read_sql_query("SELECT date, category, amount FROM expenses WHERE date LIKE ? ORDER BY date DESC",
                                conn, params=(month + "%",))
         if df.empty:
-            st.info("Nincs kiadás erre a hónapra.")
+            st.info("Nincs költség erre a hónapra.")
         else:
             total = df['amount'].sum()
             st.subheader(f"Összesen: {total:.2f} Ft")
@@ -223,10 +223,10 @@ def expense_app():
             st.altair_chart(chart, use_container_width=True)
 
     # 📋 All Expenses Overview
-    elif menu == "📋 Összes kiadás":
+    elif menu == "📋 Összes költség":
         df_all = pd.read_sql_query("SELECT id, date, category, amount FROM expenses ORDER BY date DESC", conn)
         if df_all.empty:
-            st.info("Nincsenek rögzített kiadások.")
+            st.info("Nincsenek rögzített költségek.")
         else:
             st.dataframe(df_all)
             st.write(f"💰 Teljes összeg: {df_all['amount'].sum():.2f} Ft")
@@ -237,15 +237,15 @@ def expense_app():
             st.subheader("📆 Havi bontás:")
             st.dataframe(monthly)
     # ✏️ Edit/Delete
-    elif menu == "✏️ Kiadások szerkesztése / törlése":
+    elif menu == "✏️ Költségek szerkesztése / törlése":
         if st.session_state['role'] == 'admin':
-            st.subheader("✏️ Kiadások szerkesztése")
+            st.subheader("✏️ Költségek szerkesztése")
 
             # read into pandas DataFrame
             df = pd.read_sql_query("SELECT * FROM expenses ORDER BY date DESC", conn)
 
             if df.empty:
-                st.info("❕ Nincs rögzített kiadás.")
+                st.info("❕ Nincs rögzített költség.")
             else:
                 # Ensure proper types
                 df['date'] = pd.to_datetime(df['date'], errors='coerce')           # convert dates
@@ -265,7 +265,7 @@ def expense_app():
                     group = df[df['month'] == month].sort_values('date', ascending=False)
                     month_total = group['amount'].sum()
                     # month expander with subtotal
-                    with st.expander(f"📆 {month} havi kiadások — Összesen: {month_total:,.0f} Ft"):
+                    with st.expander(f"📆 {month} havi költségek — Összesen: {month_total:,.0f} Ft"):
                         for _, expense in group.iterrows():
                             exp_id = int(expense['id'])
                             # build a friendly label for the inner expander
@@ -290,14 +290,14 @@ def expense_app():
                                             WHERE id = ?
                                         """, (new_date.isoformat(), new_category, new_amount, exp_id))
                                         conn.commit()
-                                        st.success("✅ Kiadás frissítve.")
+                                        st.success("✅ Költség frissítve.")
                                         st.rerun()
 
                                 with col2:
                                     if st.button("🗑️ Törlés", key=f"delete_{exp_id}"):
                                         conn.execute("DELETE FROM expenses WHERE id = ?", (exp_id,))
                                         conn.commit()
-                                        st.success("🗑️ Kiadás törölve.")
+                                        st.success("🗑️ Költség törölve.")
                                         st.rerun()
         else:
             st.warning("🔒 Ehhez a funkcióhoz admin jogosultság szükséges.")
