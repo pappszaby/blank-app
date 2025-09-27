@@ -57,7 +57,7 @@ for key, default in {
 # --- Auth Functions ---
 def login():
     st.title("Bejelentkezés")
-    st.header("Nádasdy utca 15/1 - 411 es lakás")
+    st.header("Nádasdy utca 15/1 - 411-es lakás")
     username = st.text_input("Felhasználónév")
     password = st.text_input("Jelszó", type="password")
 
